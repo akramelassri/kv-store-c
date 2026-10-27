@@ -3,13 +3,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include "hash.h"
 
 /*
     TODO:
-    - implement delete
-    - values with spaces problem
     - fix cmd limited to size buf
-    - switch to hashtable
+    - fix quit problem
 */
 
 #define MAX_ENTRIES 100
@@ -77,23 +76,16 @@ static void handle_line(int fd, char *line)
             reply(fd, "ERR usage: SET key value\n");
             return;
         }
-        if (strlen(key) >= 128 || strlen(val) >= 1024)
+        if (strlen(key) > 512 || strlen(val) > 4096)
         {
             reply(fd, "ERR key or value too long\n");
             return;
         }
-        struct entry *e = find_entry(key);
-        if (!e)
+        if (ht_set(key, val) != 0)
         {
-            if (nentries == MAX_ENTRIES)
-            {
-                reply(fd, "ERR store full\n");
-                return;
-            }
-            e = &store[nentries++];
-            strcpy(e->key, key);
+            reply(fd, "ERR out of memory\n");
+            return;
         }
-        strcpy(e->val, val);
         reply(fd, "OK\n");
     }
     else if (strcmp(cmd, "GET") == 0)
@@ -104,13 +96,13 @@ static void handle_line(int fd, char *line)
             reply(fd, "ERR usage: GET key\n");
             return;
         }
-        struct entry *e = find_entry(key);
+        struct hentry *e = ht_find(key);
         if (!e)
         {
             reply(fd, "NOT_FOUND\n");
             return;
         }
-        char out[1100];
+        char out[4200];
         snprintf(out, sizeof out, "%s\n", e->val);
         reply(fd, out);
     }
@@ -122,17 +114,7 @@ static void handle_line(int fd, char *line)
             reply(fd, "ERR usage: DELETE key\n");
             return;
         }
-        for (int i = 0; i < nentries; i++)
-        {
-            if (strcmp(store[i].key, key) == 0)
-            {
-                store[i] = store[nentries - 1];
-                nentries--;
-                reply(fd, "DELETED\n");
-                return;
-            }
-        }
-        reply(fd, "NOT_FOUND\n");
+        reply(fd, ht_del(key) ? "DELETED\n" : "NOT_FOUND\n");
     }
     else if (strcmp(cmd, "PING") == 0)
     {
@@ -178,6 +160,8 @@ int main(int argc, char **argv)
     listen(lfd, 8);
 
     printf("listening on %d\n", port);
+
+    ht_init();
 
     char buf[4096];
     for (;;)
