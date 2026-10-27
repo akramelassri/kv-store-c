@@ -31,6 +31,28 @@ static struct entry *find_entry(const char *key)
     return NULL;
 }
 
+static char *next_word(char **rest)
+{
+    char *s = *rest;
+    while (*s == ' ')
+        s++;
+    char *start = s;
+    while (*s && *s != ' ')
+        s++;
+    if (*s)
+    {
+        *s = 0;
+        s++;
+    }
+    *rest = s;
+    return start;
+}
+
+static void reply(int fd, const char *s)
+{
+    send(fd, s, strlen(s), 0);
+}
+
 static void handle_line(int fd, char *line)
 {
     size_t len = strlen(line);
@@ -41,17 +63,23 @@ static void handle_line(int fd, char *line)
     if (!len)
         return;
 
-    char *cmd = strtok(line, " ");
-    if (!cmd)
-        return;
+    char *rest = line;
+    char *cmd = next_word(&rest);
 
     if (strcmp(cmd, "SET") == 0)
     {
-        char *key = strtok(NULL, " ");
-        char *val = strtok(NULL, " ");
-        if (!key || !val)
+        char *key = next_word(&rest);
+        while (*rest == ' ')
+            rest++;
+        char *val = rest;
+        if (!*key || !*val)
         {
-            send(fd, "ERR need key and value\n", 22, 0);
+            reply(fd, "ERR usage: SET key value\n");
+            return;
+        }
+        if (strlen(key) >= 128 || strlen(val) >= 1024)
+        {
+            reply(fd, "ERR key or value too long\n");
             return;
         }
         struct entry *e = find_entry(key);
@@ -59,36 +87,65 @@ static void handle_line(int fd, char *line)
         {
             if (nentries == MAX_ENTRIES)
             {
-                send(fd, "ERR store full\n", 15, 0);
+                reply(fd, "ERR store full\n");
                 return;
             }
             e = &store[nentries++];
-            snprintf(e->key, sizeof e->key, "%s", key);
+            strcpy(e->key, key);
         }
-        snprintf(e->val, sizeof e->val, "%s", val);
-        send(fd, "OK\n", 3, 0);
+        strcpy(e->val, val);
+        reply(fd, "OK\n");
     }
     else if (strcmp(cmd, "GET") == 0)
     {
-        char *key = strtok(NULL, " ");
-        if (!key)
+        char *key = next_word(&rest);
+        if (!*key)
         {
-            send(fd, "ERR need key\n", 13, 0);
+            reply(fd, "ERR usage: GET key\n");
             return;
         }
         struct entry *e = find_entry(key);
         if (!e)
         {
-            send(fd, "NOT_FOUND\n", 10, 0);
+            reply(fd, "NOT_FOUND\n");
             return;
         }
         char out[1100];
-        int n = snprintf(out, sizeof out, "%s\n", e->val);
-        send(fd, out, n, 0);
+        snprintf(out, sizeof out, "%s\n", e->val);
+        reply(fd, out);
+    }
+    else if (strcmp(cmd, "DELETE") == 0)
+    {
+        char *key = next_word(&rest);
+        if (!*key)
+        {
+            reply(fd, "ERR usage: DELETE key\n");
+            return;
+        }
+        for (int i = 0; i < nentries; i++)
+        {
+            if (strcmp(store[i].key, key) == 0)
+            {
+                store[i] = store[nentries - 1];
+                nentries--;
+                reply(fd, "DELETED\n");
+                return;
+            }
+        }
+        reply(fd, "NOT_FOUND\n");
+    }
+    else if (strcmp(cmd, "PING") == 0)
+    {
+        reply(fd, "PONG\n");
+    }
+    else if (strcmp(cmd, "QUIT") == 0)
+    {
+        reply(fd, "BYE\n");
+        exit(0);
     }
     else
     {
-        send(fd, "ERR unknown command\n", 20, 0);
+        reply(fd, "ERR unknown command\n");
     }
 }
 
