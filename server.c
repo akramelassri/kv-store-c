@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 
 /*
-    TODO: 
+    TODO:
     - implement delete
     - values with spaces problem
     - fix cmd limited to size buf
@@ -14,7 +14,8 @@
 
 #define MAX_ENTRIES 100
 
-struct entry {
+struct entry
+{
     char key[128];
     char val[1024];
 };
@@ -33,23 +34,31 @@ static struct entry *find_entry(const char *key)
 static void handle_line(int fd, char *line)
 {
     size_t len = strlen(line);
-    if (len && line[len - 1] == '\n') line[--len] = 0;
-    if (len && line[len - 1] == '\r') line[--len] = 0;
-    if (!len) return;
+    if (len && line[len - 1] == '\n')
+        line[--len] = 0;
+    if (len && line[len - 1] == '\r')
+        line[--len] = 0;
+    if (!len)
+        return;
 
     char *cmd = strtok(line, " ");
-    if (!cmd) return;
+    if (!cmd)
+        return;
 
-    if (strcmp(cmd, "SET") == 0) {
+    if (strcmp(cmd, "SET") == 0)
+    {
         char *key = strtok(NULL, " ");
         char *val = strtok(NULL, " ");
-        if (!key || !val) {
+        if (!key || !val)
+        {
             send(fd, "ERR need key and value\n", 22, 0);
             return;
         }
         struct entry *e = find_entry(key);
-        if (!e) {
-            if (nentries == MAX_ENTRIES) {
+        if (!e)
+        {
+            if (nentries == MAX_ENTRIES)
+            {
                 send(fd, "ERR store full\n", 15, 0);
                 return;
             }
@@ -58,23 +67,27 @@ static void handle_line(int fd, char *line)
         }
         snprintf(e->val, sizeof e->val, "%s", val);
         send(fd, "OK\n", 3, 0);
-
-    } else if (strcmp(cmd, "GET") == 0) {
+    }
+    else if (strcmp(cmd, "GET") == 0)
+    {
         char *key = strtok(NULL, " ");
-        if (!key) {
+        if (!key)
+        {
             send(fd, "ERR need key\n", 13, 0);
             return;
         }
         struct entry *e = find_entry(key);
-        if (!e) {
+        if (!e)
+        {
             send(fd, "NOT_FOUND\n", 10, 0);
             return;
         }
         char out[1100];
         int n = snprintf(out, sizeof out, "%s\n", e->val);
         send(fd, out, n, 0);
-
-    } else {
+    }
+    else
+    {
         send(fd, "ERR unknown command\n", 20, 0);
     }
 }
@@ -82,10 +95,12 @@ static void handle_line(int fd, char *line)
 int main(int argc, char **argv)
 {
     int port = 7331;
-    if (argc > 1) port = atoi(argv[1]);
+    if (argc > 1)
+        port = atoi(argv[1]);
 
     int lfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (lfd < 0) {
+    if (lfd < 0)
+    {
         perror("socket");
         return 1;
     }
@@ -98,7 +113,8 @@ int main(int argc, char **argv)
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
 
-    if (bind(lfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (bind(lfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
         perror("bind");
         return 1;
     }
@@ -107,15 +123,18 @@ int main(int argc, char **argv)
     printf("listening on %d\n", port);
 
     char buf[4096];
-    for (;;) {
+    for (;;)
+    {
         int cfd = accept(lfd, NULL, NULL);
-        if (cfd < 0) {
+        if (cfd < 0)
+        {
             perror("accept");
             continue;
         }
 
         ssize_t n;
-        while ((n = recv(cfd, buf, sizeof(buf) - 1, 0)) > 0) {
+        while ((n = recv(cfd, buf, sizeof(buf) - 1, 0)) > 0)
+        {
             // cmd limited to buff size
             buf[n] = '\0';
             handle_line(cfd, buf);
