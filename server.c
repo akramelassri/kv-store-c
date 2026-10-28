@@ -11,25 +11,6 @@
     - fix quit problem
 */
 
-#define MAX_ENTRIES 100
-
-struct entry
-{
-    char key[128];
-    char val[1024];
-};
-
-static struct entry store[MAX_ENTRIES];
-static int nentries = 0;
-
-static struct entry *find_entry(const char *key)
-{
-    for (int i = 0; i < nentries; i++)
-        if (strcmp(store[i].key, key) == 0)
-            return &store[i];
-    return NULL;
-}
-
 static char *next_word(char **rest)
 {
     char *s = *rest;
