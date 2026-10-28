@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include "errno.h"
 
 #include "server.h"
 #include "parser.h"
@@ -11,7 +12,21 @@
 
 void reply(int fd, const char *s)
 {
-    send(fd, s, strlen(s), 0);
+    size_t len = strlen(s);
+
+    while (len > 0)
+    {
+        ssize_t n = send(fd, s, len, 0);
+
+        if (n < 0 && errno == EINTR)
+            continue;
+
+        if (n <= 0)
+            return;
+
+        s += n;
+        len -= (size_t)n;
+    }
 }
 
 int server_listen(int port)
