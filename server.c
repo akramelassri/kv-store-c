@@ -2,14 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <arpa/inet.h>
 #include "hash.h"
 
-/*
-    TODO:
-    - fix cmd limited to size buf
-    - fix quit problem
-*/
+#define MAX_LINE 8192
 
 static char *next_word(char **rest)
 {
@@ -33,7 +30,8 @@ static void reply(int fd, const char *s)
     send(fd, s, strlen(s), 0);
 }
 
-static void handle_line(int fd, char *line)
+/* returns int so we can act accordingly with each cmd */
+static int handle_line(int fd, char *line)
 {
     size_t len = strlen(line);
     if (len && line[len - 1] == '\n')
@@ -41,7 +39,7 @@ static void handle_line(int fd, char *line)
     if (len && line[len - 1] == '\r')
         line[--len] = 0;
     if (!len)
-        return;
+        return 0;
 
     char *rest = line;
     char *cmd = next_word(&rest);
@@ -55,17 +53,17 @@ static void handle_line(int fd, char *line)
         if (!*key || !*val)
         {
             reply(fd, "ERR usage: SET key value\n");
-            return;
+            return 0;
         }
-        if (strlen(key) > 512 || strlen(val) > 4096)
+        if (strlen(key) > 512 || strlen(val) > MAX_LINE - 64)
         {
             reply(fd, "ERR key or value too long\n");
-            return;
+            return 0;
         }
         if (ht_set(key, val) != 0)
         {
             reply(fd, "ERR out of memory\n");
-            return;
+            return 0;
         }
         reply(fd, "OK\n");
     }
@@ -75,15 +73,15 @@ static void handle_line(int fd, char *line)
         if (!*key)
         {
             reply(fd, "ERR usage: GET key\n");
-            return;
+            return 0;
         }
         struct hentry *e = ht_find(key);
         if (!e)
         {
             reply(fd, "NOT_FOUND\n");
-            return;
+            return 0;
         }
-        char out[4200];
+        char out[MAX_LINE + 8];
         snprintf(out, sizeof out, "%s\n", e->val);
         reply(fd, out);
     }
@@ -93,7 +91,7 @@ static void handle_line(int fd, char *line)
         if (!*key)
         {
             reply(fd, "ERR usage: DELETE key\n");
-            return;
+            return 0;
         }
         reply(fd, ht_del(key) ? "DELETED\n" : "NOT_FOUND\n");
     }
@@ -104,11 +102,45 @@ static void handle_line(int fd, char *line)
     else if (strcmp(cmd, "QUIT") == 0)
     {
         reply(fd, "BYE\n");
-        exit(0);
+        return 1;
     }
     else
     {
         reply(fd, "ERR unknown command\n");
+    }
+    return 0;
+}
+
+static void serve_client(int fd)
+{
+    char buf[MAX_LINE];
+    size_t len = 0;
+
+    for (;;)
+    {
+        if (len >= sizeof buf)
+        {
+            reply(fd, "ERR line too long\n");
+            return;
+        }
+        ssize_t n = recv(fd, buf + len, sizeof buf - len, 0);
+        if (n <= 0)
+            return;
+        len += (size_t)n;
+
+        char *start = buf;
+        for (;;)
+        {
+            char *nl = memchr(start, '\n', len - (size_t)(start - buf));
+            if (!nl)
+                break;
+            *nl = 0;
+            if (handle_line(fd, start))
+                return;
+            start = nl + 1;
+        }
+        len -= (size_t)(start - buf);
+        memmove(buf, start, len);
     }
 }
 
@@ -117,6 +149,8 @@ int main(int argc, char **argv)
     int port = 7331;
     if (argc > 1)
         port = atoi(argv[1]);
+
+    signal(SIGPIPE, SIG_IGN);
 
     int lfd = socket(AF_INET, SOCK_STREAM, 0);
     if (lfd < 0)
@@ -144,7 +178,6 @@ int main(int argc, char **argv)
 
     ht_init();
 
-    char buf[4096];
     for (;;)
     {
         int cfd = accept(lfd, NULL, NULL);
@@ -153,14 +186,7 @@ int main(int argc, char **argv)
             perror("accept");
             continue;
         }
-
-        ssize_t n;
-        while ((n = recv(cfd, buf, sizeof(buf) - 1, 0)) > 0)
-        {
-            // cmd limited to buff size
-            buf[n] = '\0';
-            handle_line(cfd, buf);
-        }
+        serve_client(cfd);
         close(cfd);
     }
 }
