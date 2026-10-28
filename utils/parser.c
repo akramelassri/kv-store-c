@@ -1,10 +1,9 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 #include <unistd.h>
-#include <signal.h>
-#include <arpa/inet.h>
 #include "hash.h"
+#include "server.h"
 
 #define MAX_LINE 8192
 
@@ -25,13 +24,8 @@ static char *next_word(char **rest)
     return start;
 }
 
-static void reply(int fd, const char *s)
-{
-    send(fd, s, strlen(s), 0);
-}
-
 /* returns int so we can act accordingly with each cmd */
-static int handle_line(int fd, char *line)
+int handle_line(int fd, char *line)
 {
     size_t len = strlen(line);
     if (len && line[len - 1] == '\n')
@@ -109,84 +103,4 @@ static int handle_line(int fd, char *line)
         reply(fd, "ERR unknown command\n");
     }
     return 0;
-}
-
-static void serve_client(int fd)
-{
-    char buf[MAX_LINE];
-    size_t len = 0;
-
-    for (;;)
-    {
-        if (len >= sizeof buf)
-        {
-            reply(fd, "ERR line too long\n");
-            return;
-        }
-        ssize_t n = recv(fd, buf + len, sizeof buf - len, 0);
-        if (n <= 0)
-            return;
-        len += (size_t)n;
-
-        char *start = buf;
-        for (;;)
-        {
-            char *nl = memchr(start, '\n', len - (size_t)(start - buf));
-            if (!nl)
-                break;
-            *nl = 0;
-            if (handle_line(fd, start))
-                return;
-            start = nl + 1;
-        }
-        len -= (size_t)(start - buf);
-        memmove(buf, start, len);
-    }
-}
-
-int main(int argc, char **argv)
-{
-    int port = 7331;
-    if (argc > 1)
-        port = atoi(argv[1]);
-
-    signal(SIGPIPE, SIG_IGN);
-
-    int lfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (lfd < 0)
-    {
-        perror("socket");
-        return 1;
-    }
-
-    int one = 1;
-    setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(port);
-
-    if (bind(lfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
-        perror("bind");
-        return 1;
-    }
-    listen(lfd, 8);
-
-    printf("listening on %d\n", port);
-
-    ht_init();
-
-    for (;;)
-    {
-        int cfd = accept(lfd, NULL, NULL);
-        if (cfd < 0)
-        {
-            perror("accept");
-            continue;
-        }
-        serve_client(cfd);
-        close(cfd);
-    }
 }

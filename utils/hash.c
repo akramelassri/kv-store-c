@@ -77,7 +77,7 @@ int ht_del(const char *key)
         {
             *pp = e->next;
             free(e->key);
-            free(e->val); // was leaking this before
+            free(e->val);
             free(e);
             return 1;
         }
