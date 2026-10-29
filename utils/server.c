@@ -114,7 +114,6 @@ static void serve_client(int fd)
         len -= (size_t)(start - buf);
         memmove(buf, start, len);
     }
-    printf("[DEBUG]: Client disconnected or Error\n");
 }
 
 void server_run(int lfd)
@@ -131,6 +130,8 @@ void server_run(int lfd)
 
         printf("[INFO]: Client connected\n");
         serve_client(cfd);
+        printf("[DEBUG]: Client disconnected or Error\n");
+
         close(cfd);
     }
 }
