@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     if (lfd < 0)
         return 1;
 
-    printf("listening on %d\n", port);
+    printf("[INFO]: Listening on %d\n", port);
 
     server_run(lfd);
 

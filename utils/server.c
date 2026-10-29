@@ -105,8 +105,9 @@ static void serve_client(int fd)
             *nl = '\0';
 
             if (handle_line(fd, start))
+            {
                 return;
-
+            }
             start = nl + 1;
         }
 
@@ -127,6 +128,7 @@ void server_run(int lfd)
             continue;
         }
 
+        printf("[INFO]: Client connected\n");
         serve_client(cfd);
         close(cfd);
     }

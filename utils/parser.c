@@ -38,6 +38,9 @@ int handle_line(int fd, char *line)
     char *rest = line;
     char *cmd = next_word(&rest);
 
+    printf("[DEBUG]: %zu Bytes recieved\n", len);
+    printf("[DEBUG]: Received Command: %s\n", cmd);
+
     if (strcmp(cmd, "SET") == 0)
     {
         char *key = next_word(&rest);
