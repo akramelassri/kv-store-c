@@ -86,8 +86,17 @@ static void serve_client(int fd)
         ssize_t n = recv(fd, buf + len,
                          sizeof(buf) - len, 0);
 
-        if (n <= 0)
+        if (n == 0)
+        {
+            printf("[INFO]: Client Disconnected\n");
             return;
+        }
+
+        if (n < 0)
+        {
+            printf("[ERROR]: recv error\n");
+            return;
+        }
 
         len += (size_t)n;
 
@@ -106,6 +115,7 @@ static void serve_client(int fd)
 
             if (handle_line(fd, start))
             {
+                printf("[INFO]: Client requested disconnect\n");
                 return;
             }
             start = nl + 1;
@@ -130,7 +140,6 @@ void server_run(int lfd)
 
         printf("[INFO]: Client connected\n");
         serve_client(cfd);
-        printf("[DEBUG]: Client disconnected or Error\n");
 
         close(cfd);
     }
