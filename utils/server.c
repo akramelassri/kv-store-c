@@ -115,7 +115,7 @@ static void serve_client(int fd)
 
             if (handle_line(fd, start))
             {
-                printf("[INFO]: Client requested disconnect\n");
+                printf("[INFO]: Client disconnected (QUIT)\n");
                 return;
             }
             start = nl + 1;
